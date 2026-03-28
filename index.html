@@ -718,49 +718,50 @@ function showPreview(i) {
     if (!p) return;
     $('pointsList').style.display = 'none';
     APP.navPreviewIndex = i;
-    updateHud();
     renderRoutePoints();
+
+    const currentZoom = APP.map.getZoom();
+    const mapSize = APP.map.getSize();
 
     if (p.pts && p.pts.length >= 2) {
         const firstPt = p.pts[0];
         const lastPt = p.pts[p.pts.length - 1];
-        const currentZoom = APP.map.getZoom();
-
-        const latDiff = Math.abs(lastPt[0] - firstPt[0]);
-        const lonDiff = Math.abs(lastPt[1] - firstPt[1]);
-
+        
         const minLat = Math.min(firstPt[0], lastPt[0]);
         const maxLat = Math.max(firstPt[0], lastPt[0]);
         const minLon = Math.min(firstPt[1], lastPt[1]);
         const maxLon = Math.max(firstPt[1], lastPt[1]);
 
-        const latMargin = (maxLat - minLat) * 0.3 || 0.001;
-        const lonMargin = (maxLon - minLon) * 0.3 || 0.001;
-
         const requiredBounds = L.latLngBounds(
-            [minLat - latMargin, minLon - lonMargin],
-            [maxLat + latMargin, maxLon + lonMargin]
+            [minLat, minLon],
+            [maxLat, maxLon]
         );
 
         const currentBounds = APP.map.getBounds();
-        const currentLatSpan = currentBounds.getNorth() - currentBounds.getSouth();
-        const currentLonSpan = currentBounds.getEast() - currentBounds.getWest();
+        const fitsInCurrentView = currentBounds.contains(requiredBounds);
 
-        const requiredLatSpan = requiredBounds.getNorth() - requiredBounds.getSouth();
-        const requiredLonSpan = requiredBounds.getEast() - requiredBounds.getWest();
+        if (!fitsInCurrentView) {
+            const latMargin = (maxLat - minLat) * 0.3 || 0.001;
+            const lonMargin = (maxLon - minLon) * 0.3 || 0.001;
 
-        const zoomIsSufficient = currentLatSpan >= requiredLatSpan && currentLonSpan >= requiredLonSpan;
+            const zoomBounds = L.latLngBounds(
+                [minLat - latMargin, minLon - lonMargin],
+                [maxLat + latMargin, maxLon + lonMargin]
+            );
 
-        if (zoomIsSufficient) {
-            const centerPt = [(firstPt[0] + lastPt[0]) / 2, (firstPt[1] + lastPt[1]) / 2];
-            APP.map.setCenter(centerPt, currentZoom, { animate: true, duration: 1 });
+            const minZoomNeeded = APP.map.getBoundsZoom(zoomBounds);
+            const targetZoom = Math.min(currentZoom, minZoomNeeded);
+
+            APP.map.flyToBounds(requiredBounds, { animate: true, duration: 1.5, padding: [50, 50], maxZoom: targetZoom });
         } else {
-            APP.map.fitBounds(requiredBounds, { animate: true, padding: [50, 50] });
+            const centerPt = [(firstPt[0] + lastPt[0]) / 2, (firstPt[1] + lastPt[1]) / 2];
+            APP.map.flyTo(centerPt, currentZoom, { animate: true, duration: 1.5 });
         }
     } else if (p.lat && p.lon) {
-        const currentZoom = APP.map.getZoom();
-        APP.map.setCenter([p.lat, p.lon], currentZoom, { animate: true, duration: 1 });
+        APP.map.flyTo([p.lat, p.lon], currentZoom, { animate: true, duration: 1.5 });
     }
+    
+    updateHud();
 }
 
 function setTarget(i) {
