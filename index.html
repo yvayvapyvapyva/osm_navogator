@@ -452,6 +452,7 @@ if (typeof vkBridge !== 'undefined') {
 let toastTimer = null;
 
 function showToast(text, type = 'info', duration = 2000) {
+    console.log('[showToast]', text, type, duration);
     const el = $('toast');
     el.textContent = text;
     el.className = `toast ${type} show`;
@@ -513,20 +514,47 @@ function initGeolocation() {
                     }
                 }
 
-                if (APP.autoCenter && APP.map) APP.map.setCenter(coords);
+                if (APP.autoCenter && APP.map) APP.map.setView(coords);
                 if (APP.navCurrentIndex >= 0 && APP.navPreviewIndex < 0) navCheckTriggers();
             },
-            (err) => console.warn('Geolocation error:', err),
+            (err) => {
+                console.warn('Geolocation error:', err);
+                // Не показываем ошибку для code 2, если позиция уже получена
+                if (err.code !== 2 || !APP.lastPos) {
+                    let msg = 'Ошибка геопозиции: ';
+                    if (err.code === 1) msg += 'Доступ запрещён';
+                    else if (err.code === 2) msg += 'Службы геолокации отключены';
+                    else if (err.code === 3) msg += 'Таймаут получения позиции';
+                    else msg += err.message;
+                    showToast(msg, 'error', 5000);
+                }
+            },
             { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
         );
+    } else {
+        showToast('Геолокация не поддерживается браузером', 'error', 5000);
     }
 }
 
 function toggleAutoCenter() {
+    console.log('[toggleAutoCenter] APP.lastPos:', APP.lastPos, 'APP.map:', APP.map, 'APP.autoCenter:', APP.autoCenter);
+    if (!APP.lastPos) {
+        showToast('Нет данных геопозиции.', 'error', 3000);
+        return;
+    }
+    if (!APP.map) {
+        showToast('Карта не инициализирована.', 'error', 3000);
+        return;
+    }
     APP.autoCenter = !APP.autoCenter;
     $('locateBtn').classList.toggle('active', APP.autoCenter);
-    if (APP.autoCenter && APP.lastPos) APP.map.setCenter(APP.lastPos);
-    showToast(APP.autoCenter ? 'Привязка включена' : 'Привязка отключена');
+    if (APP.autoCenter) {
+        console.log('[toggleAutoCenter] Центрирование на:', APP.lastPos);
+        APP.map.setView(APP.lastPos);
+        showToast('Привязка включена');
+    } else {
+        showToast('Привязка отключена');
+    }
 }
 
 // ============================================
@@ -1140,11 +1168,10 @@ function initMap() {
     APP.userMarker = L.marker([0, 0], { icon: userIcon, zIndexOffset: 5000 });
     APP.map.addLayer(APP.userMarker);
     // Скрываем маркер пока нет геопозиции
-    setTimeout(() => {
-        if (APP.userMarker.getElement()) {
-            APP.userMarker.getElement().style.display = 'none';
-        }
-    }, 100);
+    APP.userMarker.on('add', () => {
+        const el = APP.userMarker.getElement();
+        if (el) el.style.display = 'none';
+    });
 
     initGeolocation();
 
